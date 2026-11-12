@@ -1,0 +1,1394 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Grandmaster Archive - Chess Openings Explorer & Trainer</title>
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- Chess.js library for reliable rule validation & PGN/SAN parsing -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/chess.js/0.10.3/chess.min.js"></script>
+    <!-- Canvas Confetti for Quiz Celebrations -->
+    <script src="https://cdn.jsdelivr.net/npm/canvas-confetti@1.6.0/dist/confetti.browser.min.js"></script>
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        navy: {
+                            950: '#060a12',
+                            900: '#090d16',
+                            800: '#111827',
+                            700: '#1f293d',
+                            600: '#2b3954'
+                        },
+                        electric: {
+                            400: '#38bdf8',
+                            500: '#0ea5e9',
+                            600: '#2563eb',
+                            700: '#1d4ed8',
+                            glow: 'rgba(59, 130, 246, 0.35)'
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;600&display=swap');
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #090d16;
+            color: #f1f5f9;
+        }
+
+        .mono-font {
+            font-family: 'JetBrains Mono', monospace;
+        }
+
+        /* Custom Scrollbar */
+        ::-webkit-scrollbar {
+            width: 6px;
+            height: 6px;
+        }
+        ::-webkit-scrollbar-track {
+            background: #0d1322;
+        }
+        ::-webkit-scrollbar-thumb {
+            background: #1e293b;
+            border-radius: 4px;
+        }
+        ::-webkit-scrollbar-thumb:hover {
+            background: #3b82f6;
+        }
+
+        /* Chess Board Styling */
+        .sq-light {
+            background-color: #dbeafe;
+            color: #1e293b;
+        }
+        .sq-dark {
+            background-color: #2563eb;
+            color: #eff6ff;
+        }
+        .sq-highlight {
+            background-color: rgba(250, 204, 21, 0.65) !important;
+        }
+        .sq-last-move {
+            background-color: rgba(56, 189, 248, 0.45) !important;
+            box-shadow: inset 0 0 0 2px #38bdf8;
+        }
+        .sq-correct {
+            background-color: rgba(16, 185, 129, 0.7) !important;
+            box-shadow: inset 0 0 0 3px #10b981;
+        }
+        .sq-wrong {
+            background-color: rgba(244, 63, 94, 0.7) !important;
+            box-shadow: inset 0 0 0 3px #f43f5e;
+        }
+
+        /* Pulse glow for active elements */
+        .electric-glow {
+            box-shadow: 0 0 20px rgba(59, 130, 246, 0.25);
+        }
+        .electric-border {
+            border: 1px solid rgba(59, 130, 246, 0.3);
+        }
+        .electric-border-active {
+            border: 1px solid rgba(56, 189, 248, 0.8);
+            box-shadow: 0 0 15px rgba(14, 165, 233, 0.3);
+        }
+        
+        /* Drag preview styling */
+        .dragging {
+            opacity: 0.4;
+        }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col bg-[#090d16] text-slate-100 antialiased selection:bg-blue-600 selection:text-white">
+
+    <!-- Top Header Navigation -->
+    <header class="border-b border-slate-800 bg-navy-900/90 backdrop-blur-md sticky top-0 z-40 px-4 lg:px-8 py-3 transition-all">
+        <div class="max-w-7xl mx-auto flex flex-col md:flex-row md:items-center justify-between gap-3">
+            <div class="flex items-center space-x-3">
+                <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-blue-700 via-blue-500 to-sky-400 p-0.5 flex items-center justify-center shadow-lg shadow-blue-500/20">
+                    <div class="w-full h-full bg-navy-950 rounded-[10px] flex items-center justify-center">
+                        <i data-lucide="crown" class="w-6 h-6 text-sky-400"></i>
+                    </div>
+                </div>
+                <div>
+                    <h1 class="text-xl font-bold tracking-tight bg-gradient-to-r from-white via-slate-200 to-sky-400 bg-clip-text text-transparent">
+                        GRANDMASTER ARCHIVE
+                    </h1>
+                    <p class="text-xs text-sky-400/80 font-medium">Interactive Chess Opening Explorer & Repertoire Trainer</p>
+                </div>
+            </div>
+
+            <!-- Global Quick Stats & Repertoire Filter -->
+            <div class="flex items-center space-x-4">
+                <div class="hidden sm:flex items-center space-x-2 bg-navy-800/80 border border-slate-800 rounded-lg px-3 py-1.5 text-xs">
+                    <span class="text-slate-400">Library:</span>
+                    <span id="stat-total" class="font-bold text-sky-400">26</span>
+                    <span class="text-slate-600">|</span>
+                    <span class="text-slate-400">Mastered:</span>
+                    <span id="stat-mastered" class="font-bold text-emerald-400">0</span>
+                </div>
+                <button id="btn-quiz-all" onclick="startRandomQuiz()" class="flex items-center space-x-2 bg-gradient-to-r from-blue-600 to-sky-500 hover:from-blue-500 hover:to-sky-400 text-white text-xs font-semibold px-4 py-2 rounded-lg transition-all shadow-md shadow-blue-600/30 hover:scale-[1.02] active:scale-[0.98]">
+                    <i data-lucide="zap" class="w-4 h-4"></i>
+                    <span>Random Quiz Mode</span>
+                </button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main Container Layout -->
+    <main class="flex-1 max-w-7xl w-full mx-auto p-3 md:p-6 grid grid-cols-1 lg:grid-cols-12 gap-6">
+
+        <!-- LEFT COLUMN: Opening Explorer & Search List (Desktop 3 Cols) -->
+        <section class="lg:col-span-4 flex flex-col space-y-4 bg-navy-800/60 border border-slate-800/80 rounded-2xl p-4 backdrop-blur-sm h-[85vh] lg:h-[calc(100vh-100px)] sticky top-20">
+            
+            <!-- Search & Filters Header -->
+            <div class="space-y-3">
+                <div class="relative">
+                    <i data-lucide="search" class="w-4 h-4 absolute left-3 top-1/2 -translate-y-1/2 text-slate-400"></i>
+                    <input type="text" id="search-input" placeholder="Search opening name or ECO code..." 
+                           class="w-full bg-navy-950/80 border border-slate-700/80 text-sm text-slate-200 placeholder-slate-500 rounded-xl pl-9 pr-4 py-2.5 focus:outline-none focus:border-sky-500 focus:ring-1 focus:ring-sky-500 transition-all">
+                </div>
+
+                <!-- Category Pills -->
+                <div class="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs no-scrollbar" id="category-pills">
+                    <button class="cat-btn active bg-sky-500 text-white px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-all" data-cat="all">All (26)</button>
+                    <button class="cat-btn bg-navy-950/80 hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg whitespace-nowrap border border-slate-800 transition-all" data-cat="1.e4 e5">1.e4 e5</button>
+                    <button class="cat-btn bg-navy-950/80 hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg whitespace-nowrap border border-slate-800 transition-all" data-cat="Semi-Open">Semi-Open</button>
+                    <button class="cat-btn bg-navy-950/80 hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg whitespace-nowrap border border-slate-800 transition-all" data-cat="1.d4 & Indian">1.d4 & Indian</button>
+                    <button class="cat-btn bg-navy-950/80 hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg whitespace-nowrap border border-slate-800 transition-all" data-cat="Flank/Systems">Flank/Systems</button>
+                    <button class="cat-btn bg-navy-950/80 hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg whitespace-nowrap border border-slate-800 transition-all" data-cat="mastered">★ Mastered</button>
+                </div>
+            </div>
+
+            <!-- Openings Scrollable List -->
+            <div id="openings-list" class="flex-1 overflow-y-auto space-y-2 pr-1">
+                <!-- Dynamically Rendered Opening Cards -->
+            </div>
+        </section>
+
+        <!-- CENTER COLUMN: Interactive Chessboard & Controls (Desktop 5 Cols) -->
+        <section class="lg:col-span-5 flex flex-col items-center space-y-4">
+            
+            <!-- Mode Header Tabs -->
+            <div class="w-full flex items-center justify-between bg-navy-800/80 border border-slate-800 rounded-xl p-1.5">
+                <button id="tab-explorer" onclick="setAppMode('explorer')" class="flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center space-x-2 bg-blue-600 text-white shadow-md">
+                    <i data-lucide="compass" class="w-4 h-4"></i>
+                    <span>Explorer & Theory</span>
+                </button>
+                <button id="tab-practice" onclick="setAppMode('practice')" class="flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center space-x-2 text-slate-400 hover:text-white">
+                    <i data-lucide="swords" class="w-4 h-4"></i>
+                    <span>Practice / Quiz</span>
+                </button>
+            </div>
+
+            <!-- Quiz Alert Banner (Shown during Practice Mode) -->
+            <div id="quiz-banner" class="hidden w-full bg-gradient-to-r from-blue-900/60 to-navy-900 border border-blue-500/40 rounded-xl p-3 flex items-center justify-between text-xs transition-all">
+                <div class="flex items-center space-x-2.5">
+                    <div id="quiz-status-icon" class="w-7 h-7 rounded-lg bg-blue-500/20 text-sky-400 flex items-center justify-center">
+                        <i data-lucide="help-circle" class="w-4 h-4"></i>
+                    </div>
+                    <div>
+                        <div id="quiz-prompt-title" class="font-bold text-sky-300">Your Turn to Move</div>
+                        <div id="quiz-prompt-desc" class="text-slate-400 text-[11px]">Play the move on the board</div>
+                    </div>
+                </div>
+                <div class="flex items-center space-x-2">
+                    <button onclick="provideQuizHint()" class="px-2.5 py-1 bg-navy-950 border border-slate-700 hover:border-sky-400 text-sky-400 rounded-md transition-all font-medium">Hint</button>
+                    <button onclick="resetPracticeLine()" class="px-2.5 py-1 bg-slate-800 hover:bg-slate-700 text-slate-200 rounded-md transition-all">Reset</button>
+                </div>
+            </div>
+
+            <!-- Interactive Board Wrapper -->
+            <div class="w-full max-w-[460px] aspect-square relative select-none rounded-2xl overflow-hidden shadow-2xl border-2 border-slate-800/90 electric-glow">
+                
+                <!-- 8x8 Board Container -->
+                <div id="board-grid" class="w-full h-full grid grid-cols-8 grid-rows-8 bg-slate-900">
+                    <!-- 64 Squares injected by JS -->
+                </div>
+
+                <!-- Floating Coordinates Overlay -->
+                <div id="coords-ranks" class="absolute left-1 top-0 bottom-0 flex flex-col justify-around text-[10px] font-bold pointer-events-none text-slate-400/70 select-none">
+                    <span>8</span><span>7</span><span>6</span><span>5</span><span>4</span><span>3</span><span>2</span><span>1</span>
+                </div>
+                <div id="coords-files" class="absolute bottom-0.5 left-0 right-0 flex justify-around text-[10px] font-bold pointer-events-none text-slate-400/70 select-none px-2">
+                    <span>a</span><span>b</span><span>c</span><span>d</span><span>e</span><span>f</span><span>g</span><span>h</span>
+                </div>
+            </div>
+
+            <!-- Board Navigation Controls -->
+            <div class="w-full max-w-[460px] bg-navy-800/80 border border-slate-800 rounded-xl p-2.5 flex items-center justify-between gap-2 shadow-lg">
+                <div class="flex items-center space-x-1">
+                    <button onclick="goToMove(0)" class="p-2 hover:bg-slate-800 text-slate-300 hover:text-sky-400 rounded-lg transition-all" title="Start Position">
+                        <i data-lucide="chevrons-left" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="stepMove(-1)" class="p-2 hover:bg-slate-800 text-slate-300 hover:text-sky-400 rounded-lg transition-all" title="Previous Move">
+                        <i data-lucide="chevron-left" class="w-4 h-4"></i>
+                    </button>
+                    <button id="btn-play-pause" onclick="toggleAutoPlay()" class="p-2 bg-blue-600/30 hover:bg-blue-600/50 text-sky-300 rounded-lg transition-all border border-blue-500/30" title="Auto Play Line">
+                        <i id="play-icon" data-lucide="play" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="stepMove(1)" class="p-2 hover:bg-slate-800 text-slate-300 hover:text-sky-400 rounded-lg transition-all" title="Next Move">
+                        <i data-lucide="chevron-right" class="w-4 h-4"></i>
+                    </button>
+                    <button onclick="goToMove(currentOpening.moves.length)" class="p-2 hover:bg-slate-800 text-slate-300 hover:text-sky-400 rounded-lg transition-all" title="End Position">
+                        <i data-lucide="chevrons-right" class="w-4 h-4"></i>
+                    </button>
+                </div>
+
+                <div class="flex items-center space-x-2">
+                    <button onclick="toggleBoardFlip()" class="px-3 py-1.5 bg-navy-950 hover:bg-slate-800 border border-slate-700 text-slate-300 text-xs rounded-lg flex items-center space-x-1.5 transition-all">
+                        <i data-lucide="rotate-cw" class="w-3.5 h-3.5"></i>
+                        <span>Flip Board</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Toast / Notification banner -->
+            <div id="toast-message" class="opacity-0 transition-opacity duration-300 text-xs px-4 py-2 rounded-lg bg-sky-950/90 border border-sky-500/40 text-sky-200 text-center w-full max-w-[460px]">
+                Ready to explore
+            </div>
+
+        </section>
+
+        <!-- RIGHT COLUMN: Theory Breakdown, Move Notation & Master Notes (Desktop 3-4 Cols) -->
+        <section class="lg:col-span-3 flex flex-col space-y-4 bg-navy-800/60 border border-slate-800/80 rounded-2xl p-4 backdrop-blur-sm h-[85vh] lg:h-[calc(100vh-100px)] overflow-y-auto">
+            
+            <!-- Opening Details Card -->
+            <div class="space-y-3 pb-3 border-b border-slate-800">
+                <div class="flex items-start justify-between">
+                    <div>
+                        <span id="opening-eco" class="mono-font text-xs px-2 py-0.5 rounded bg-blue-900/60 text-sky-400 font-bold border border-blue-500/30">C60</span>
+                        <h2 id="opening-title" class="text-lg font-bold text-slate-100 mt-1 leading-tight">Ruy Lopez</h2>
+                        <span id="opening-category" class="text-xs text-slate-400">Open Games (1.e4 e5)</span>
+                    </div>
+                    <button id="btn-mastered" onclick="toggleMastery()" class="p-2 rounded-xl border border-slate-700 bg-navy-950 text-slate-400 hover:text-amber-400 hover:border-amber-400/50 transition-all" title="Mark as Mastered">
+                        <i data-lucide="star" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <!-- Win/Draw/Loss Stat Bar -->
+                <div class="space-y-1">
+                    <div class="flex justify-between text-[11px] text-slate-400">
+                        <span>Win Stats:</span>
+                        <span><strong id="stat-w" class="text-emerald-400">38% W</strong> / <strong id="stat-d" class="text-slate-300">38% D</strong> / <strong id="stat-l" class="text-rose-400">24% L</strong></span>
+                    </div>
+                    <div class="h-2 w-full bg-slate-800 rounded-full overflow-hidden flex">
+                        <div id="bar-w" class="bg-emerald-500 h-full" style="width: 38%"></div>
+                        <div id="bar-d" class="bg-slate-400 h-full" style="width: 38%"></div>
+                        <div id="bar-l" class="bg-rose-500 h-full" style="width: 24%"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Synchronized Move Notation Box -->
+            <div class="space-y-2">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center justify-between">
+                    <span>Move Sequence</span>
+                    <span id="move-counter" class="text-sky-400 text-[11px] font-normal">Move 0 / 16</span>
+                </h3>
+                <div id="moves-container" class="bg-navy-950/90 border border-slate-800 rounded-xl p-2.5 max-h-36 overflow-y-auto flex flex-wrap gap-1.5 text-xs font-mono">
+                    <!-- Move pills injected dynamically -->
+                </div>
+            </div>
+
+            <!-- Key Strategic Concepts & Plans -->
+            <div class="space-y-3 flex-1">
+                <h3 class="text-xs font-bold uppercase tracking-wider text-slate-400 flex items-center space-x-1.5">
+                    <i data-lucide="lightbulb" class="w-4 h-4 text-amber-400"></i>
+                    <span>Strategic Blueprint</span>
+                </h3>
+
+                <div class="space-y-2 text-xs text-slate-300">
+                    <div class="bg-navy-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
+                        <div class="font-semibold text-sky-300 flex items-center space-x-1">
+                            <i data-lucide="target" class="w-3.5 h-3.5 text-sky-400"></i>
+                            <span>Core Objective</span>
+                        </div>
+                        <p id="theory-overview" class="text-slate-300 leading-relaxed">Pressure Black's knight on c6 to weaken defense of the e5 pawn while castling early.</p>
+                    </div>
+
+                    <div class="bg-navy-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
+                        <div class="font-semibold text-emerald-300 flex items-center space-x-1">
+                            <i data-lucide="shield" class="w-3.5 h-3.5 text-emerald-400"></i>
+                            <span>Key Middlegame Plans</span>
+                        </div>
+                        <p id="theory-plans" class="text-slate-300 leading-relaxed">Maneuver Nb1-d2-f1-g3, push d4 to dominate the center, launch a Kingside pawn rush.</p>
+                    </div>
+
+                    <div class="bg-navy-950/60 border border-slate-800/80 p-3 rounded-xl space-y-1">
+                        <div class="font-semibold text-rose-300 flex items-center space-x-1">
+                            <i data-lucide="alert-triangle" class="w-3.5 h-3.5 text-rose-400"></i>
+                            <span>Famous Trap / Pitfall</span>
+                        </div>
+                        <p id="theory-trap" class="text-slate-300 leading-relaxed">Noah's Ark Trap: White's light-squared bishop gets trapped on b3 if Black plays ...b5, ...d6, ...c5, ...c4.</p>
+                        <button onclick="playTrapLine()" class="mt-2 px-2.5 py-1 bg-rose-500/20 hover:bg-rose-500/30 border border-rose-500/40 text-rose-300 text-[11px] rounded-lg transition-all w-full text-center">
+                            Watch Trap Line Demonstration
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Personal Study Notes (Saved in localStorage) -->
+            <div class="space-y-1.5 pt-2 border-t border-slate-800">
+                <label for="user-notes" class="text-[11px] font-bold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                    <span>Personal Notes</span>
+                    <span class="text-[10px] text-slate-500 font-normal">Auto-saved</span>
+                </label>
+                <textarea id="user-notes" rows="2" placeholder="Write your tactical observations or repertoire ideas..." 
+                          class="w-full bg-navy-950/80 border border-slate-800 text-xs text-slate-200 placeholder-slate-600 rounded-xl p-2.5 focus:outline-none focus:border-sky-500 transition-all resize-none"></textarea>
+            </div>
+
+        </section>
+    </main>
+
+    <!-- JavaScript Core logic -->
+    <script>
+        /* ==========================================================================
+           1. EXTENSIVE CHESS OPENINGS DATABASE (26 HIGH-IMPACT OPENINGS)
+           ========================================================================== */
+        const OPENINGS_DATABASE = [
+            {
+                id: 'ruy-lopez',
+                eco: 'C65',
+                name: 'Ruy Lopez (Spanish Opening)',
+                category: '1.e4 e5',
+                side: 'White',
+                difficulty: 'Intermediate',
+                stats: { w: 38, d: 38, l: 24 },
+                moves: ["e4", "e5", "Nf3", "Nc6", "Bb5", "a6", "Ba4", "Nf6", "O-O", "Be7", "Re1", "b5", "Bb3", "d6", "c3", "O-O"],
+                overview: "One of chess history's most respected openings. White pressures the c6 knight to threaten Black's center e5 pawn.",
+                plans: "Prepare c3 and d4 central strike, maneuver Nb1-d2-f1-g3 to join a Kingside attack, control the long diagonal.",
+                trap: "Noah's Ark Trap: If White is careless with d4 without safety, Black traps the bishop on b3 via ...b5, ...d6, ...c5, ...c4.",
+                trapMoves: ["e4", "e5", "Nf3", "Nc6", "Bb5", "a6", "Ba4", "d6", "d4", "b5", "Bb3", "Nxd4", "Nxd4", "exd4", "Qxd4", "c5", "Qd5", "Be6", "Qc6+", "Bd7", "Qd5", "c4"]
+            },
+            {
+                id: 'italian-game',
+                eco: 'C50',
+                name: 'Italian Game (Giuoco Piano)',
+                category: '1.e4 e5',
+                side: 'White',
+                difficulty: 'Beginner',
+                stats: { w: 40, d: 32, l: 28 },
+                moves: ["e4", "e5", "Nf3", "Nc6", "Bc4", "Bc5", "c3", "Nf6", "d4", "exd4", "cxd4", "Bb4+", "Bd2", "Bxd2+", "Nbxd2"],
+                overview: "A classical opening aiming for fast development and direct targeting of Black's vulnerable f7 square.",
+                plans: "Establish a strong pawn center with c3 and d4, castle early, launch Kingside piece play.",
+                trap: "Blackboard Trap: Falling for an early f7 sacrifice without supporting pieces.",
+                trapMoves: ["e4", "e5", "Nf3", "Nc6", "Bc4", "Bc5", "b4", "Bxb4", "c3", "Ba5", "d4", "exd4", "O-O", "dxc3", "Qb3"]
+            },
+            {
+                id: 'evans-gambit',
+                eco: 'C51',
+                name: 'Evans Gambit',
+                category: '1.e4 e5',
+                side: 'White',
+                difficulty: 'Aggressive',
+                stats: { w: 48, d: 22, l: 30 },
+                moves: ["e4", "e5", "Nf3", "Nc6", "Bc4", "Bc5", "b4", "Bxb4", "c3", "Ba5", "d4", "exd4", "O-O"],
+                overview: "A daring pawn sacrifice favored by Paul Morphy and Garry Kasparov to seize central control and diagonal lines.",
+                plans: "Sacrifice the b-pawn for rapid mobilization, keep Black's king trapped in the center with Ba3 or Qb3.",
+                trap: "Black accepting all gambit pawns and lagging in development leads to crushing mate along the f7 square.",
+                trapMoves: ["e4", "e5", "Nf3", "Nc6", "Bc4", "Bc5", "b4", "Bxb4", "c3", "Ba5", "d4", "d6", "Qb3", "Qd7", "dxe5", "dxe5", "O-O", "Bb6", "Rd1"]
+            },
+            {
+                id: 'fried-liver',
+                eco: 'C57',
+                name: 'Fried Liver Attack',
+                category: '1.e4 e5',
+                side: 'White',
+                difficulty: 'Tactical',
+                stats: { w: 56, d: 14, l: 30 },
+                moves: ["e4", "e5", "Nf3", "Nc6", "Bc4", "Nf6", "Ng5", "d5", "exd5", "Nxd5", "Nxf7", "Kxf7", "Qf3+", "Ke6", "Nc3"],
+                overview: "A ferocious piece sacrifice on f7 forcing the Black king out into the open center.",
+                plans: "Maintain relentless pressure on the pinned d5 knight with Nc3 and Qe4, dragging Black's king to destruction.",
+                trap: "Black playing ...Nxd5 instead of the correct ...Na5 allows the knight sacrifice on f7.",
+                trapMoves: ["e4", "e5", "Nf3", "Nc6", "Bc4", "Nf6", "Ng5", "d5", "exd5", "Nxd5", "Nxf7", "Kxf7", "Qf3+", "Ke6", "Nc3", "Ncb4", "a3", "Nxc2+", "Kd1", "Nxa1", "Nxd5"]
+            },
+            {
+                id: 'sicilian-najdorf',
+                eco: 'B90',
+                name: 'Sicilian Defense: Najdorf',
+                category: 'Semi-Open',
+                side: 'Black',
+                difficulty: 'Advanced',
+                stats: { w: 34, d: 34, l: 32 },
+                moves: ["e4", "c5", "Nf3", "d6", "d4", "cxd4", "Nxd4", "Nf6", "Nc3", "a6", "Be3", "e5", "Nb3", "Be6", "f3", "Be7"],
+                overview: "The ultimate fighting weapon for Black against 1.e4, made famous by Bobby Fischer and Garry Kasparov.",
+                plans: "Prepare ...b5 queenside expansion, control the critical d5 outpost square, launch counter-attack on open c-file.",
+                trap: "White playing an early Bg5 or Nd5 sacrifice if Black delays ...a6 or king safety.",
+                trapMoves: ["e4", "c5", "Nf3", "d6", "d4", "cxd4", "Nxd4", "Nf6", "Nc3", "a6", "Bg5", "e6", "f4", "Qb6", "Qd2", "Qxb2"]
+            },
+            {
+                id: 'sicilian-dragon',
+                eco: 'B70',
+                name: 'Sicilian Defense: Dragon',
+                category: 'Semi-Open',
+                side: 'Black',
+                difficulty: 'Aggressive',
+                stats: { w: 42, d: 24, l: 34 },
+                moves: ["e4", "c5", "Nf3", "d6", "d4", "cxd4", "Nxd4", "Nf6", "Nc3", "g6", "Be3", "Bg7", "f3", "O-O", "Qd2", "Nc6"],
+                overview: "Named after the dragon-like shape of Black's pawn structure. Leads to razor-sharp opposite-side castling battles.",
+                plans: "Fianchetto dark-squared bishop on g7 to slice down the long h8-a1 diagonal, attack White's queenside.",
+                trap: "Yugoslav Attack h4-h5 pawn storm mating traps against Black's king.",
+                trapMoves: ["e4", "c5", "Nf3", "d6", "d4", "cxd4", "Nxd4", "Nf6", "Nc3", "g6", "Be3", "Bg7", "f3", "O-O", "Qd2", "Nc6", "Bc4", "Bd7", "O-O-O", "Rc8", "Bb3", "Ne5", "h4", "h5"]
+            },
+            {
+                id: 'sicilian-alapin',
+                eco: 'B22',
+                name: 'Sicilian Defense: Alapin',
+                category: 'Semi-Open',
+                side: 'White',
+                difficulty: 'Solid',
+                stats: { w: 39, d: 35, l: 26 },
+                moves: ["e4", "c5", "c3", "Nf6", "e5", "Nd5", "d4", "cxd4", "cxd4", "d6", "Nf3", "Nc6", "Bc4", "e6"],
+                overview: "White plays 2.c3 to build an ideal classical pawn duo on d4 and e4, bypassing deep main line theory.",
+                plans: "Maintain strong pawn center on d4/e5, develop smoothly with Nf3 and Bc4.",
+                trap: "Black trying to hold onto c4 pawn without development gets overrun centrally.",
+                trapMoves: ["e4", "c5", "c3", "d5", "exd5", "Qxd5", "d4", "Nf6", "Nf3", "Bg4", "dxc5", "Qxd1+", "Kxd1"]
+            },
+            {
+                id: 'french-winawer',
+                eco: 'C18',
+                name: 'French Defense: Winawer',
+                category: 'Semi-Open',
+                side: 'Black',
+                difficulty: 'Intermediate',
+                stats: { w: 36, d: 34, l: 30 },
+                moves: ["e4", "e6", "d4", "d5", "Nc3", "Bb4", "e5", "c5", "a3", "Bxc3+", "bxc3", "Ne7", "Qg4", "Qc7"],
+                overview: "Counter-attacking opening where Black pins White's knight and strikes White's center pawn chain.",
+                plans: "Undermine White's e5 base with ...c5 and ...f6, exploit White's doubled c-pawns in the endgame.",
+                trap: "Poisoned Pawn Variation where Black sacrifices the g7 pawn for counterplay on the Queenside.",
+                trapMoves: ["e4", "e6", "d4", "d5", "Nc3", "Bb4", "e5", "c5", "a3", "Bxc3+", "bxc3", "Ne7", "Qg4", "cxd4", "Qxg7", "Rg8", "Qxh7"]
+            },
+            {
+                id: 'caro-kann-advance',
+                eco: 'B12',
+                name: 'Caro-Kann: Advance Variation',
+                category: 'Semi-Open',
+                side: 'Black',
+                difficulty: 'Solid',
+                stats: { w: 38, d: 35, l: 27 },
+                moves: ["e4", "c6", "d4", "d5", "e5", "Bf5", "Nf3", "e6", "Be2", "c5", "Be3", "Qb6", "Nc3", "Nc6"],
+                overview: "Ultra-solid defense. Black develops the light-squared bishop to f5 before locking the pawn structure with ...e6.",
+                plans: "Break White's center with ...c5 and ...Qb6, preserve light-squared bishop, safe king side castling.",
+                trap: "White sacrificing on f7 or trapped bishop along the h2-b8 diagonal if Black plays carelessly.",
+                trapMoves: ["e4", "c6", "d4", "d5", "e5", "Bf5", "g4", "Bg6", "h4", "h6", "e6", "fxe6", "Bd3"]
+            },
+            {
+                id: 'scandinavian',
+                eco: 'B01',
+                name: 'Scandinavian Defense',
+                category: 'Semi-Open',
+                side: 'Black',
+                difficulty: 'Beginner',
+                stats: { w: 41, d: 30, l: 29 },
+                moves: ["e4", "d5", "exd5", "Qxd5", "Nc3", "Qa5", "d4", "Nf6", "Nf3", "c6", "Bc4", "Bf5", "Bd2", "e6"],
+                overview: "Direct central challenge on move 1. Easy to learn and avoids vast pawn chain memorization.",
+                plans: "Establish solid c6/e6 pawn wall, slide Queen back to a5 or d8, active piece play.",
+                trap: "Discovered attack traps on Black's queen on a5 via Nd5 or Ne5.",
+                trapMoves: ["e4", "d5", "exd5", "Qxd5", "Nc3", "Qa5", "d4", "Nf6", "Nf3", "Bf5", "Ne5", "c6", "g4", "Bg6", "h4"]
+            },
+            {
+                id: 'queens-gambit-declined',
+                eco: 'D37',
+                name: "Queen's Gambit Declined (QGD)",
+                category: '1.d4 & Indian',
+                side: 'White',
+                difficulty: 'Intermediate',
+                stats: { w: 37, d: 40, l: 23 },
+                moves: ["d4", "d5", "c4", "e6", "Nc3", "Nf6", "Nf3", "Be7", "Bf4", "O-O", "e3", "c5", "dxc5", "Bxc5"],
+                overview: "The rock-solid classical backbone of 1.d4 chess. White offers c4 pawn to gain central supremacy.",
+                plans: "Minority attack on Queenside (b4-b5), leverage central control, build sustained positional pressure.",
+                trap: "Elephant Trap: Black traps White's knight if White greedily wins a pawn on d5.",
+                trapMoves: ["d4", "d5", "c4", "e6", "Nc3", "Nf6", "Bg5", "Nbd7", "cxd5", "exd5", "Nxd5", "Nxd5", "Bxd8", "Bb4+", "Qd2", "Kxd8"]
+            },
+            {
+                id: 'slav-defense',
+                eco: 'D11',
+                name: 'Slav Defense',
+                category: '1.d4 & Indian',
+                side: 'Black',
+                difficulty: 'Solid',
+                stats: { w: 36, d: 38, l: 26 },
+                moves: ["d4", "d5", "c4", "c6", "Nf3", "Nf6", "Nc3", "dxc4", "a4", "Bf5", "e3", "e6", "Bxc4", "Bb4"],
+                overview: "Black supports d5 with c6 so the light-squared bishop remains free to develop to f5.",
+                plans: "Control e4 square, maintain unbreakable pawn structure, strike back with ...c5 when ready.",
+                trap: "White overreaching on the queenside allowing Black's active bishop to infiltrate.",
+                trapMoves: ["d4", "d5", "c4", "c6", "Nf3", "Nf6", "Nc3", "dxc4", "e4", "b5", "e5", "Nd5", "a4", "e6"]
+            },
+            {
+                id: 'kings-indian-defense',
+                eco: 'E97',
+                name: "King's Indian Defense (KID)",
+                category: '1.d4 & Indian',
+                side: 'Black',
+                difficulty: 'Advanced',
+                stats: { w: 38, d: 28, l: 34 },
+                moves: ["d4", "Nf6", "c4", "g6", "Nc3", "Bg7", "e4", "d6", "Nf3", "O-O", "Be2", "e5", "O-O", "Nc6", "d5", "Ne7"],
+                overview: "Hypermodern masterpiece where Black lets White build a massive center, then unleashes a Kingside pawn storm.",
+                plans: "Push ...f5 and ...g5 to attack White's king, while White rushes on the Queenside.",
+                trap: "White getting checkmated on the Kingside despite being up massive Queenside material.",
+                trapMoves: ["d4", "Nf6", "c4", "g6", "Nc3", "Bg7", "e4", "d6", "Nf3", "O-O", "Be2", "e5", "O-O", "Nc6", "d5", "Ne7", "Ne1", "Nd7", "f3", "f5", "g4", "f4", "h4", "Bbf6"]
+            },
+            {
+                id: 'nimzo-indian',
+                eco: 'E40',
+                name: 'Nimzo-Indian Defense',
+                category: '1.d4 & Indian',
+                side: 'Black',
+                difficulty: 'Intermediate',
+                stats: { w: 35, d: 38, l: 27 },
+                moves: ["d4", "Nf6", "c4", "e6", "Nc3", "Bb4", "e3", "O-O", "Bd3", "d5", "Nf3", "c5", "O-O", "Nc6"],
+                overview: "Profound positional defense pinning White's knight to prevent e4 and force doubled c-pawns.",
+                plans: "Inflict doubled c-pawns on White, blockade e4, exert dark-square control.",
+                trap: "White overextending pawn center leading to structural weaknesses.",
+                trapMoves: ["d4", "Nf6", "c4", "e6", "Nc3", "Bb4", "Qc2", "c5", "dxc5", "O-O", "a3", "Bxc5", "Nf3", "b6"]
+            },
+            {
+                id: 'grunfeld-defense',
+                eco: 'D85',
+                name: 'Grünfeld Defense',
+                category: '1.d4 & Indian',
+                side: 'Black',
+                difficulty: 'Advanced',
+                stats: { w: 38, d: 32, l: 30 },
+                moves: ["d4", "Nf6", "c4", "g6", "Nc3", "d5", "cxd5", "Nxd5", "e4", "Nxc3", "bxc3", "Bg7", "Nf3", "c5"],
+                overview: "Dynamic hypermodern defense favored by Garry Kasparov. Black allows White a big center then destroys it.",
+                plans: "Tear down White's d4 pawn center with ...c5 and ...Bg7, open counterplay on c-file.",
+                trap: "White pawn center collapsing under tactical counter-punches.",
+                trapMoves: ["d4", "Nf6", "c4", "g6", "Nc3", "d5", "cxd5", "Nxd5", "e4", "Nxc3", "bxc3", "Bg7", "Bc4", "c5", "Ne2", "Nc6", "Be3", "O-O", "O-O", "Bg4", "f3", "Na5"]
+            },
+            {
+                id: 'london-system',
+                eco: 'D02',
+                name: 'London System',
+                category: 'Flank/Systems',
+                side: 'White',
+                difficulty: 'Beginner',
+                stats: { w: 40, d: 36, l: 24 },
+                moves: ["d4", "d5", "Bf4", "Nf6", "e3", "c5", "c3", "Nc6", "Nd2", "e6", "Ngf3", "Bd6", "Bg3", "O-O"],
+                overview: "Extremely reliable system for White that can be played against almost any Black setup.",
+                plans: "Build a strong pyramid pawn structure (c3-d4-e3), place knight on e5, attack along the h-file.",
+                trap: "Black trying early ...Qb6 can get hit by Nc2-b4 tactics.",
+                trapMoves: ["d4", "d5", "Bf4", "c5", "e3", "Qb6", "Nc3", "cxd4", "exd4", "Qxb2", "Nbd5"]
+            },
+            {
+                id: 'catalan-opening',
+                eco: 'E04',
+                name: 'Catalan Opening',
+                category: '1.d4 & Indian',
+                side: 'White',
+                difficulty: 'Advanced',
+                stats: { w: 42, d: 38, l: 20 },
+                moves: ["d4", "Nf6", "c4", "e6", "g3", "d5", "Bg2", "Be7", "Nf3", "O-O", "O-O", "dxc4", "Qc2", "a6", "a4"],
+                overview: "Combines Queen's Gambit pressure with a sniper bishop on g2. A favorite of Vladimir Kramnik.",
+                plans: "Exert long-range pressure along the h1-a8 diagonal, recover c4 pawn with superior position.",
+                trap: "Black clinging to the c4 pawn gets caught in positional pins.",
+                trapMoves: ["d4", "Nf6", "c4", "e6", "g3", "d5", "Bg2", "dxc4", "Nf3", "b5", "Ne5", "Nd5", "a4", "c6"]
+            },
+            {
+                id: 'english-opening',
+                eco: 'A10',
+                name: 'English Opening',
+                category: 'Flank/Systems',
+                side: 'White',
+                difficulty: 'Intermediate',
+                stats: { w: 39, d: 37, l: 24 },
+                moves: ["c4", "e5", "Nc3", "Nf6", "g3", "d5", "cxd5", "Nxd5", "Bg2", "Nb6", "Nf3", "Nc6", "O-O", "Be7"],
+                overview: "Flexible flank opening controlling d5 from the side while keeping options open for transpositions.",
+                plans: "Expand on Queenside with a3/b4, leverage dark-squared bishop on g2.",
+                trap: "Reversed Sicilian tactics catching Black unprepared centrally.",
+                trapMoves: ["c4", "e5", "Nc3", "Nf6", "Nf3", "Nc6", "g3", "d5", "cxd5", "Nxd5", "Bg2", "Be6", "O-O", "Be7", "d4", "exd4", "Nxd4"]
+            },
+            {
+                id: 'reti-opening',
+                eco: 'A09',
+                name: 'Réti Opening',
+                category: 'Flank/Systems',
+                side: 'White',
+                difficulty: 'Intermediate',
+                stats: { w: 39, d: 38, l: 23 },
+                moves: ["Nf3", "d5", "c4", "d4", "g3", "Nc6", "Bg2", "e5", "d3", "Nf6", "O-O", "Be7"],
+                overview: "Hypermodern masterpiece where White controls center with knights and fianchettoed bishops from afar.",
+                plans: "Provoke enemy pawn over-extension, then undermine with c4 and e3 thrusts.",
+                trap: "Black central pawns overextended and surrounded by White pieces.",
+                trapMoves: ["Nf3", "d5", "c4", "d4", "b4", "f6", "e3", "e5", "c5"]
+            },
+            {
+                id: 'kings-gambit',
+                eco: 'C30',
+                name: "King's Gambit",
+                category: '1.e4 e5',
+                side: 'White',
+                difficulty: 'Aggressive',
+                stats: { w: 46, d: 18, l: 36 },
+                moves: ["e4", "e5", "f4", "exf4", "Nf3", "g5", "h4", "g4", "Ne5", "Nf6", "d4", "d6", "Nd3", "Nxe4"],
+                overview: "Romantic 19th-century opening sacrificing f-pawn for maximum speed development and central control.",
+                plans: "Attack along open f-file, build total d4/e4 central dominance, hunt Black's king.",
+                trap: "Falkbeer Counter-Gambit traps or quick checkmates on f7.",
+                trapMoves: ["e4", "e5", "f4", "Bc5", "Nf3", "d6", "c3", "Bg4", "fxe5", "dxe5", "Qa4+", "Bd7", "Qc4"]
+            },
+            {
+                id: 'petrov-defense',
+                eco: 'C42',
+                name: "Petrov's Defense (Russian Defense)",
+                category: '1.e4 e5',
+                side: 'Black',
+                difficulty: 'Solid',
+                stats: { w: 30, d: 50, l: 20 },
+                moves: ["e4", "e5", "Nf3", "Nf6", "Nxe5", "d6", "Nf3", "Nxe4", "d4", "d5", "Bd3", "Bd6", "O-O", "O-O"],
+                overview: "Symmetrical counter-attack on White's e4 pawn instead of passive defense. Famous rock-solid draw weapon.",
+                plans: "Neutralize White's first-move initiative, castle safely, trade active pieces.",
+                trap: "Center Trap: Black playing 2...Nxe4 directly gets pinned on e-file via Qe2.",
+                trapMoves: ["e4", "e5", "Nf3", "Nf6", "Nxe5", "Nxe4", "Qe2", "Nf6", "Nc6+"]
+            },
+            {
+                id: 'dutch-defense',
+                eco: 'A87',
+                name: 'Dutch Defense (Leningrad)',
+                category: 'Flank/Systems',
+                side: 'Black',
+                difficulty: 'Aggressive',
+                stats: { w: 36, d: 28, l: 36 },
+                moves: ["d4", "f5", "g3", "Nf6", "Bg2", "g6", "Nf3", "Bg7", "O-O", "O-O", "c4", "d6", "Nc3", "c6"],
+                overview: "Asymmetrical response to 1.d4 claiming control over e4 with the f-pawn from move one.",
+                plans: "Prepare ...e5 breakthrough, launch Kingside attacks, leverage fianchettoed dark bishop.",
+                trap: "Staunton Gambit traps against unprepared Black players.",
+                trapMoves: ["d4", "f5", "e4", "fxe4", "Nc3", "Nf6", "Bg5", "c6", "f3", "exf3"]
+            },
+            {
+                id: 'alekhine-defense',
+                eco: 'B02',
+                name: "Alekhine's Defense",
+                category: 'Semi-Open',
+                side: 'Black',
+                difficulty: 'Tactical',
+                stats: { w: 38, d: 28, l: 34 },
+                moves: ["e4", "Nf6", "e5", "Nd5", "d4", "d6", "c4", "Nb6", "f4", "dxe5", "fxe5", "Nc6", "Be3", "Bf5"],
+                overview: "Provocative opening where Black entices White's pawns forward to later target their over-extension.",
+                plans: "Chop down White's overextended pawn center with ...d6 and ...c5.",
+                trap: "Four Pawns Attack tactics where White overreaches and collapses.",
+                trapMoves: ["e4", "Nf6", "e5", "Nd5", "c4", "Nb6", "c5", "Nd5", "Bc4", "e6", "Nc3", "Nxc3"]
+            },
+            {
+                id: 'vienna-game',
+                eco: 'C25',
+                name: 'Vienna Game',
+                category: '1.e4 e5',
+                side: 'White',
+                difficulty: 'Intermediate',
+                stats: { w: 43, d: 25, l: 32 },
+                moves: ["e4", "e5", "Nc3", "Nf6", "f4", "d5", "fxe5", "Nxe4", "Qf3", "Nxc3", "bxc3", "Be7", "d4", "O-O"],
+                overview: "White develops knight to c3 first, keeping f4 gambit options open without allowing Petrov defense.",
+                plans: "Launch central strike with f4, open f-file for rook attack, build powerful center.",
+                trap: "Frankenstein-Dracula Gambit wild tactical sacrifices.",
+                trapMoves: ["e4", "e5", "Nc3", "Nf6", "Bc4", "Nxe4", "Qh5", "Nd6", "Bb3", "Nc6", "Nb5", "g6", "Qf3", "f5", "Qd5"]
+            },
+            {
+                id: 'birds-opening',
+                eco: 'A02',
+                name: "Bird's Opening",
+                category: 'Flank/Systems',
+                side: 'White',
+                difficulty: 'Unorthodox',
+                stats: { w: 38, d: 26, l: 36 },
+                moves: ["f4", "d5", "Nf3", "g6", "e3", "Bg7", "Be2", "Nf6", "O-O", "O-O", "d3", "c5"],
+                overview: "Unorthodox opening staking an immediate claim on e5 with 1.f4.",
+                plans: "Control e5 outpost, swing Queen to h4, build Kingside attacking battery.",
+                trap: "From's Gambit (1...e5) sharp tactical retaliation by Black.",
+                trapMoves: ["f4", "e5", "fxe5", "d6", "exd6", "Bxd6", "Nf3", "g5", "h3", "Bg3#"]
+            },
+            {
+                id: 'kings-indian-attack',
+                eco: 'A07',
+                name: "King's Indian Attack (KIA)",
+                category: 'Flank/Systems',
+                side: 'White',
+                difficulty: 'Solid',
+                stats: { w: 41, d: 35, l: 24 },
+                moves: ["Nf3", "d5", "g3", "Nf6", "Bg2", "e6", "O-O", "Be7", "d3", "O-O", "Nbd2", "c5", "e4", "Nc6", "Re1"],
+                overview: "A universal system for White that can be played against virtually any defense.",
+                plans: "Push e5, maneuver Nbd2-f1-g3/h2, launch Kingside pawn & piece offensive.",
+                trap: "Kingside mating attacks with h4-h5 and knight sacrifices on f7.",
+                trapMoves: ["Nf3", "d5", "g3", "c5", "Bg2", "Nc6", "O-O", "e5", "d3", "Nf6", "Nbd2", "Be7", "e4", "O-O", "Re1", "d4", "Nc4"]
+            }
+        ];
+
+        /* ==========================================================================
+           2. STATE MANAGEMENT & GLOBALS
+           ========================================================================== */
+        let chessGame = new Chess();
+        let currentOpening = OPENINGS_DATABASE[0];
+        let currentMoveIndex = 0;
+        let isBoardFlipped = false;
+        let activeCategory = 'all';
+        let appMode = 'explorer'; // 'explorer' or 'practice'
+        let autoPlayTimer = null;
+        let isAutoPlaying = false;
+        let selectedSquare = null;
+        let legalMoveSquares = [];
+        let masteredOpenings = JSON.parse(localStorage.getItem('mastered_openings') || '[]');
+
+        /* Audio Synthesizer (Web Audio API - No external files required) */
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        function playTone(type) {
+            try {
+                if (audioCtx.state === 'suspended') audioCtx.resume();
+                const osc = audioCtx.createOscillator();
+                const gain = audioCtx.createGain();
+                osc.connect(gain);
+                gain.connect(audioCtx.destination);
+                
+                if (type === 'move') {
+                    osc.frequency.setValueAtTime(320, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.08);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.08);
+                } else if (type === 'correct') {
+                    osc.frequency.setValueAtTime(587.33, audioCtx.currentTime); // D5
+                    osc.frequency.setValueAtTime(880, audioCtx.currentTime + 0.1); // A5
+                    gain.gain.setValueAtTime(0.2, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.25);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.25);
+                } else if (type === 'wrong') {
+                    osc.type = 'sawtooth';
+                    osc.frequency.setValueAtTime(180, audioCtx.currentTime);
+                    gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+                    gain.gain.exponentialRampToValueAtTime(0.01, audioCtx.currentTime + 0.2);
+                    osc.start();
+                    osc.stop(audioCtx.currentTime + 0.2);
+                }
+            } catch(e) { console.log(e); }
+        }
+
+        /* ==========================================================================
+           3. SVG CHESS PIECE GENERATOR (Vector Crisp Icons)
+           ========================================================================== */
+        const PIECE_SVGS = {
+            'P': `<svg viewBox="0 0 45 45" class="w-full h-full drop-shadow-md"><path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03C15.41 27.09 13 30.25 13 34h19c0-3.75-2.41-6.91-5.41-7.97C28.06 24.84 29 23.03 29 21c0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="#f8fafc" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+            'N': `<svg viewBox="0 0 45 45" class="w-full h-full drop-shadow-md"><path d="M 22,10 C 32.5,11 38.5,18 38,39 L 15,39 C 15,30 25,32.5 23,18" fill="#f8fafc" stroke="#1e293b" stroke-width="1.5"/><path d="M 24,18 C 24.38,20.91 18.45,25.37 16,27 C 13,29 13.18,31.34 11,31 C 9.958,30.06 12.41,27.96 11,28 C 10,28 11.19,29.23 10,30 C 9,30 5.997,31 6,26 C 6,24 12,14 12,14 C 12,14 13.89,12.1 14,10.5 C 13.27,9.506 13.5,8.5 13.5,8.5 C 14.5,9.5 16.5,9.5 18,10 C 18.5,9.5 19.5,9.5 20,9.5 C 21.5,9.5 21.5,10.5 22,10 z" fill="#f8fafc" stroke="#1e293b" stroke-width="1.5"/></svg>`,
+            'B': `<svg viewBox="0 0 45 45" class="w-full h-full drop-shadow-md"><g fill="#f8fafc" stroke="#1e293b" stroke-width="1.5"><path d="M9 36c1.2-2.4 3.6-4 6.5-4h14c2.9 0 5.3 1.6 6.5 4M15 32c-1.5 0-3 1-3 3h21c0-2-1.5-3-3-3H15z"/><path d="M22.5 9a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM17.5 26c0-6.5 5-11 5-17 0 6 5 10.5 5 17H17.5z"/><path d="M15 16h15M22.5 10v6"/></g></svg>`,
+            'R': `<svg viewBox="0 0 45 45" class="w-full h-full drop-shadow-md"><g fill="#f8fafc" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round"><path d="M9 39h27v-3H9v3zM12 36h21l-1.5-4h-18L12 36zM14 32h17V18H14v14zM11 14h4v4h-4zM18 14h3v4h-3zM24 14h3v4h-3zM30 14h4v4h-4zM11 18h23v-4H11v4z"/></g></svg>`,
+            'Q': `<svg viewBox="0 0 45 45" class="w-full h-full drop-shadow-md"><g fill="#f8fafc" stroke="#1e293b" stroke-width="1.5"><path d="M9 26c1.2-2.4 3.6-4 6.5-4h14c2.9 0 5.3 1.6 6.5 4M9 39h27v-3H9v3zM11 36h23l-1.5-6h-20L11 36z"/><path d="M9 26l4.5-12 5.5 8 3.5-13 3.5 13 5.5-8 4.5 12H9z"/><circle cx="6" cy="12" r="2"/><circle cx="13.5" cy="11" r="2"/><circle cx="22.5" cy="8" r="2"/><circle cx="31.5" cy="11" r="2"/><circle cx="39" cy="12" r="2"/></g></svg>`,
+            'K': `<svg viewBox="0 0 45 45" class="w-full h-full drop-shadow-md"><g fill="#f8fafc" stroke="#1e293b" stroke-width="1.5" stroke-linecap="round"><path d="M22.5 6v6M19.5 9h6M11.5 37h22v-3h-22v3zM13.5 34h18l-1.5-5h-15l-1.5 5zM15 29h15v-3H15v3zM13 26c1-3 5-7 9.5-7s8.5 4 9.5 7H13z"/></g></svg>`,
+            'p': `<svg viewBox="0 0 45 45" class="w-full h-full drop-shadow-md"><path d="M22.5 9c-2.21 0-4 1.79-4 4 0 .89.29 1.71.78 2.38C17.33 16.5 16 18.59 16 21c0 2.03.94 3.84 2.41 5.03C15.41 27.09 13 30.25 13 34h19c0-3.75-2.41-6.91-5.41-7.97C28.06 24.84 29 23.03 29 21c0-2.41-1.33-4.5-3.28-5.62.49-.67.78-1.49.78-2.38 0-2.21-1.79-4-4-4z" fill="#0f172a" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"/></svg>`,
+            'n': `<svg viewBox="0 0 45 45" class="w-full h-full drop-shadow-md"><path d="M 22,10 C 32.5,11 38.5,18 38,39 L 15,39 C 15,30 25,32.5 23,18" fill="#0f172a" stroke="#38bdf8" stroke-width="1.5"/><path d="M 24,18 C 24.38,20.91 18.45,25.37 16,27 C 13,29 13.18,31.34 11,31 C 9.958,30.06 12.41,27.96 11,28 C 10,28 11.19,29.23 10,30 C 9,30 5.997,31 6,26 C 6,24 12,14 12,14 C 12,14 13.89,12.1 14,10.5 C 13.27,9.506 13.5,8.5 13.5,8.5 C 14.5,9.5 16.5,9.5 18,10 C 18.5,9.5 19.5,9.5 20,9.5 C 21.5,9.5 21.5,10.5 22,10 z" fill="#0f172a" stroke="#38bdf8" stroke-width="1.5"/></svg>`,
+            'b': `<svg viewBox="0 0 45 45" class="w-full h-full drop-shadow-md"><g fill="#0f172a" stroke="#38bdf8" stroke-width="1.5"><path d="M9 36c1.2-2.4 3.6-4 6.5-4h14c2.9 0 5.3 1.6 6.5 4M15 32c-1.5 0-3 1-3 3h21c0-2-1.5-3-3-3H15z"/><path d="M22.5 9a3.5 3.5 0 1 0 0-7 3.5 3.5 0 0 0 0 7zM17.5 26c0-6.5 5-11 5-17 0 6 5 10.5 5 17H17.5z"/><path d="M15 16h15M22.5 10v6"/></g></svg>`,
+            'r': `<svg viewBox="0 0 45 45" class="w-full h-full drop-shadow-md"><g fill="#0f172a" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"><path d="M9 39h27v-3H9v3zM12 36h21l-1.5-4h-18L12 36zM14 32h17V18H14v14zM11 14h4v4h-4zM18 14h3v4h-3zM24 14h3v4h-3zM30 14h4v4h-4zM11 18h23v-4H11v4z"/></g></svg>`,
+            'q': `<svg viewBox="0 0 45 45" class="w-full h-full drop-shadow-md"><g fill="#0f172a" stroke="#38bdf8" stroke-width="1.5"><path d="M9 26c1.2-2.4 3.6-4 6.5-4h14c2.9 0 5.3 1.6 6.5 4M9 39h27v-3H9v3zM11 36h23l-1.5-6h-20L11 36z"/><path d="M9 26l4.5-12 5.5 8 3.5-13 3.5 13 5.5-8 4.5 12H9z"/><circle cx="6" cy="12" r="2"/><circle cx="13.5" cy="11" r="2"/><circle cx="22.5" cy="8" r="2"/><circle cx="31.5" cy="11" r="2"/><circle cx="39" cy="12" r="2"/></g></svg>`,
+            'k': `<svg viewBox="0 0 45 45" class="w-full h-full drop-shadow-md"><g fill="#0f172a" stroke="#38bdf8" stroke-width="1.5" stroke-linecap="round"><path d="M22.5 6v6M19.5 9h6M11.5 37h22v-3h-22v3zM13.5 34h18l-1.5-5h-15l-1.5 5zM15 29h15v-3H15v3zM13 26c1-3 5-7 9.5-7s8.5 4 9.5 7H13z"/></g></svg>`
+        };
+
+        /* ==========================================================================
+           4. CHESSBOARD RENDERING & INTERACTION LOGIC
+           ========================================================================== */
+        const boardGrid = document.getElementById('board-grid');
+
+        function renderBoard() {
+            boardGrid.innerHTML = '';
+            const history = chessGame.history({ verbose: true });
+            const lastMove = history.length > 0 ? history[history.length - 1] : null;
+
+            const files = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h'];
+            const ranks = ['8', '7', '6', '5', '4', '3', '2', '1'];
+
+            const rankOrder = isBoardFlipped ? [...ranks].reverse() : ranks;
+            const fileOrder = isBoardFlipped ? [...files].reverse() : files;
+
+            rankOrder.forEach((r, rIdx) => {
+                fileOrder.forEach((f, fIdx) => {
+                    const squareId = f + r;
+                    const squareObj = chessGame.get(squareId);
+
+                    // Compute square color (alternating light/dark)
+                    const actualFileIdx = files.indexOf(f);
+                    const actualRankIdx = ranks.indexOf(r);
+                    const isLight = (actualFileIdx + actualRankIdx) % 2 === 0;
+
+                    const sqElem = document.createElement('div');
+                    sqElem.dataset.square = squareId;
+                    sqElem.className = `relative flex items-center justify-center cursor-pointer transition-colors ${
+                        isLight ? 'sq-light' : 'sq-dark'
+                    }`;
+
+                    // Highlights
+                    if (selectedSquare === squareId) {
+                        sqElem.classList.add('sq-highlight');
+                    }
+                    if (lastMove && (lastMove.from === squareId || lastMove.to === squareId)) {
+                        sqElem.classList.add('sq-last-move');
+                    }
+
+                    // Render Piece if present
+                    if (squareObj) {
+                        const pieceKey = squareObj.color === 'w' ? squareObj.type.toUpperCase() : squareObj.type.toLowerCase();
+                        const pieceSvg = PIECE_SVGS[pieceKey] || '';
+                        const pieceContainer = document.createElement('div');
+                        pieceContainer.className = 'w-[82%] h-[82%] pointer-events-none transition-transform hover:scale-105';
+                        pieceContainer.innerHTML = pieceSvg;
+                        sqElem.appendChild(pieceContainer);
+                    }
+
+                    // Render Legal Move Hints (dots or circles)
+                    if (legalMoveSquares.includes(squareId)) {
+                        const hintDot = document.createElement('div');
+                        if (squareObj) {
+                            hintDot.className = 'absolute inset-0 border-4 border-amber-400/80 rounded-full pointer-events-none animate-pulse';
+                        } else {
+                            hintDot.className = 'w-3.5 h-3.5 bg-sky-400/80 rounded-full pointer-events-none shadow-sm shadow-sky-400';
+                        }
+                        sqElem.appendChild(hintDot);
+                    }
+
+                    // Click event listener
+                    sqElem.addEventListener('click', () => handleSquareClick(squareId));
+
+                    boardGrid.appendChild(sqElem);
+                });
+            });
+
+            // Update rank & file coordinates based on flip orientation
+            updateCoordinates(rankOrder, fileOrder);
+        }
+
+        function updateCoordinates(ranks, files) {
+            const ranksContainer = document.getElementById('coords-ranks');
+            const filesContainer = document.getElementById('coords-files');
+            ranksContainer.innerHTML = ranks.map(r => `<span>${r}</span>`).join('');
+            filesContainer.innerHTML = files.map(f => `<span>${f}</span>`).join('');
+        }
+
+        function handleSquareClick(squareId) {
+            if (appMode === 'practice') {
+                handlePracticeSquareClick(squareId);
+                return;
+            }
+
+            // Explorer Mode Click Behavior
+            const piece = chessGame.get(squareId);
+
+            // If clicking already selected square, deselect
+            if (selectedSquare === squareId) {
+                clearSelection();
+                renderBoard();
+                return;
+            }
+
+            // If a square is selected and user clicks a legal move target square
+            if (selectedSquare && legalMoveSquares.includes(squareId)) {
+                const moveObj = chessGame.move({
+                    from: selectedSquare,
+                    to: squareId,
+                    promotion: 'q'
+                });
+
+                if (moveObj) {
+                    playTone('move');
+                    clearSelection();
+                    // Append or sync move index
+                    currentMoveIndex = chessGame.history().length;
+                    renderBoard();
+                    updateMovesUI();
+                    showToast(`Played ${moveObj.san}`);
+                    return;
+                }
+            }
+
+            // Select piece of current turn
+            if (piece && piece.color === chessGame.turn()) {
+                selectedSquare = squareId;
+                const moves = chessGame.moves({ square: squareId, verbose: true });
+                legalMoveSquares = moves.map(m => m.to);
+            } else {
+                clearSelection();
+            }
+
+            renderBoard();
+        }
+
+        function clearSelection() {
+            selectedSquare = null;
+            legalMoveSquares = [];
+        }
+
+        function toggleBoardFlip() {
+            isBoardFlipped = !isBoardFlipped;
+            renderBoard();
+            showToast(isBoardFlipped ? "Board Flipped to Black perspective" : "Board Flipped to White perspective");
+        }
+
+        /* ==========================================================================
+           5. PRACTICE & QUIZ MODE LOGIC
+           ========================================================================== */
+        function handlePracticeSquareClick(squareId) {
+            const expectedSan = currentOpening.moves[currentMoveIndex];
+            
+            if (!expectedSan) {
+                showToast("Opening line completed! Great job!", "success");
+                return;
+            }
+
+            const piece = chessGame.get(squareId);
+
+            if (selectedSquare && legalMoveSquares.includes(squareId)) {
+                // Attempt move
+                const tempGame = new Chess(chessGame.fen());
+                const moveObj = tempGame.move({ from: selectedSquare, to: squareId, promotion: 'q' });
+
+                if (moveObj) {
+                    if (moveObj.san === expectedSan) {
+                        // Correct Book Move!
+                        chessGame.move({ from: selectedSquare, to: squareId, promotion: 'q' });
+                        playTone('correct');
+                        flashSquareFeedback(squareId, 'sq-correct');
+                        currentMoveIndex++;
+                        clearSelection();
+                        renderBoard();
+                        updateMovesUI();
+
+                        if (currentMoveIndex >= currentOpening.moves.length) {
+                            // Quiz Completed!
+                            triggerQuizSuccess();
+                        } else {
+                            // Auto-play opponent reply move after short delay
+                            updateQuizPrompt();
+                            setTimeout(() => autoPlayPracticeReply(), 600);
+                        }
+                    } else {
+                        // Wrong Move (Not Book Line)
+                        playTone('wrong');
+                        flashSquareFeedback(squareId, 'sq-wrong');
+                        showToast(`"${moveObj.san}" is valid, but the book move is different. Try again!`, 'error');
+                        clearSelection();
+                        renderBoard();
+                    }
+                    return;
+                }
+            }
+
+            if (piece && piece.color === chessGame.turn()) {
+                selectedSquare = squareId;
+                const moves = chessGame.moves({ square: squareId, verbose: true });
+                legalMoveSquares = moves.map(m => m.to);
+            } else {
+                clearSelection();
+            }
+
+            renderBoard();
+        }
+
+        function autoPlayPracticeReply() {
+            if (appMode !== 'practice') return;
+            const expectedSan = currentOpening.moves[currentMoveIndex];
+            if (expectedSan) {
+                const moveObj = chessGame.move(expectedSan);
+                if (moveObj) {
+                    playTone('move');
+                    currentMoveIndex++;
+                    renderBoard();
+                    updateMovesUI();
+                    updateQuizPrompt();
+
+                    if (currentMoveIndex >= currentOpening.moves.length) {
+                        triggerQuizSuccess();
+                    }
+                }
+            }
+        }
+
+        function triggerQuizSuccess() {
+            playTone('correct');
+            confetti({ particleCount: 70, spread: 60, origin: { y: 0.6 } });
+            showToast(`🎉 Mastered ${currentOpening.name}!`, 'success');
+            
+            // Auto mark as mastered
+            if (!masteredOpenings.includes(currentOpening.id)) {
+                masteredOpenings.push(currentOpening.id);
+                localStorage.setItem('mastered_openings', JSON.stringify(masteredOpenings));
+                updateMasteryUI();
+                renderOpeningsList();
+            }
+
+            document.getElementById('quiz-prompt-title').innerText = "Quiz Completed! 🌟";
+            document.getElementById('quiz-prompt-desc').innerText = "You have perfectly recalled this line.";
+        }
+
+        function flashSquareFeedback(squareId, className) {
+            const sq = document.querySelector(`[data-square="${squareId}"]`);
+            if (sq) {
+                sq.classList.add(className);
+                setTimeout(() => sq.classList.remove(className), 800);
+            }
+        }
+
+        function provideQuizHint() {
+            const expectedSan = currentOpening.moves[currentMoveIndex];
+            if (expectedSan) {
+                showToast(`Hint: Look for move starting with "${expectedSan.charAt(0)}" (${expectedSan})`);
+            }
+        }
+
+        function resetPracticeLine() {
+            chessGame.reset();
+            currentMoveIndex = 0;
+            clearSelection();
+            renderBoard();
+            updateMovesUI();
+            updateQuizPrompt();
+            showToast("Practice line reset.");
+            
+            // If practice side is Black, auto-play White's first move
+            if (currentOpening.side === 'Black' && currentOpening.moves.length > 0) {
+                setTimeout(() => autoPlayPracticeReply(), 400);
+            }
+        }
+
+        function updateQuizPrompt() {
+            const isWhiteTurn = chessGame.turn() === 'w';
+            const turnSide = isWhiteTurn ? "White" : "Black";
+            const promptTitle = document.getElementById('quiz-prompt-title');
+            const promptDesc = document.getElementById('quiz-prompt-desc');
+
+            promptTitle.innerText = `Find ${turnSide}'s Move ${Math.floor(currentMoveIndex / 2) + 1}`;
+            promptDesc.innerText = `Play the standard book move for ${currentOpening.name}`;
+        }
+
+        /* ==========================================================================
+           6. NAVIGATION & MOVE SEQUENCING
+           ========================================================================== */
+        function loadOpening(openingId, mode = appMode) {
+            const found = OPENINGS_DATABASE.find(o => o.id === openingId);
+            if (!found) return;
+
+            currentOpening = found;
+            appMode = mode;
+            stopAutoPlay();
+
+            // Setup Board
+            chessGame.reset();
+            currentMoveIndex = 0;
+            clearSelection();
+
+            // Set board orientation based on recommended side if practicing
+            if (mode === 'practice') {
+                isBoardFlipped = (currentOpening.side === 'Black');
+            }
+
+            // Update UI elements
+            updateTheoryPanel();
+            renderBoard();
+            updateMovesUI();
+            renderOpeningsList();
+
+            if (mode === 'practice') {
+                resetPracticeLine();
+            }
+        }
+
+        function goToMove(moveTargetIndex) {
+            stopAutoPlay();
+            chessGame.reset();
+            currentMoveIndex = Math.min(Math.max(0, moveTargetIndex), currentOpening.moves.length);
+
+            for (let i = 0; i < currentMoveIndex; i++) {
+                chessGame.move(currentOpening.moves[i]);
+            }
+
+            clearSelection();
+            renderBoard();
+            updateMovesUI();
+        }
+
+        function stepMove(delta) {
+            goToMove(currentMoveIndex + delta);
+            if (delta > 0) playTone('move');
+        }
+
+        function toggleAutoPlay() {
+            if (isAutoPlaying) {
+                stopAutoPlay();
+            } else {
+                startAutoPlay();
+            }
+        }
+
+        function startAutoPlay() {
+            if (currentMoveIndex >= currentOpening.moves.length) {
+                goToMove(0);
+            }
+            isAutoPlaying = true;
+            document.getElementById('play-icon').setAttribute('data-lucide', 'pause');
+            lucide.createIcons();
+
+            autoPlayTimer = setInterval(() => {
+                if (currentMoveIndex < currentOpening.moves.length) {
+                    stepMove(1);
+                } else {
+                    stopAutoPlay();
+                }
+            }, 1400);
+        }
+
+        function stopAutoPlay() {
+            isAutoPlaying = false;
+            if (autoPlayTimer) clearInterval(autoPlayTimer);
+            const playIcon = document.getElementById('play-icon');
+            if (playIcon) {
+                playIcon.setAttribute('data-lucide', 'play');
+                lucide.createIcons();
+            }
+        }
+
+        function playTrapLine() {
+            if (!currentOpening.trapMoves || currentOpening.trapMoves.length === 0) return;
+            stopAutoPlay();
+            chessGame.reset();
+            
+            // Temporarily swap opening moves to trap line
+            const tempMoves = [...currentOpening.trapMoves];
+            let trapIdx = 0;
+
+            const interval = setInterval(() => {
+                if (trapIdx < tempMoves.length) {
+                    chessGame.move(tempMoves[trapIdx]);
+                    playTone('move');
+                    trapIdx++;
+                    renderBoard();
+                } else {
+                    clearInterval(interval);
+                    showToast("Trap sequence demonstrated!", "success");
+                }
+            }, 1000);
+        }
+
+        /* ==========================================================================
+           7. UI RENDERERS & EVENT HANDLERS
+           ========================================================================== */
+        function renderOpeningsList() {
+            const listContainer = document.getElementById('openings-list');
+            const searchVal = document.getElementById('search-input').value.toLowerCase();
+
+            listContainer.innerHTML = '';
+
+            const filtered = OPENINGS_DATABASE.filter(op => {
+                const matchesSearch = op.name.toLowerCase().includes(searchVal) || op.eco.toLowerCase().includes(searchVal);
+                if (activeCategory === 'all') return matchesSearch;
+                if (activeCategory === 'mastered') return matchesSearch && masteredOpenings.includes(op.id);
+                return matchesSearch && op.category === activeCategory;
+            });
+
+            if (filtered.length === 0) {
+                listContainer.innerHTML = `
+                    <div class="text-center py-8 text-slate-500 text-xs">
+                        No openings match your criteria.
+                    </div>
+                `;
+                return;
+            }
+
+            filtered.forEach(op => {
+                const isSelected = op.id === currentOpening.id;
+                const isMastered = masteredOpenings.includes(op.id);
+
+                const card = document.createElement('div');
+                card.onclick = () => loadOpening(op.id);
+                card.className = `p-3 rounded-xl cursor-pointer border transition-all ${
+                    isSelected 
+                    ? 'bg-gradient-to-r from-blue-950/80 to-navy-900 border-sky-500/80 shadow-md electric-border-active' 
+                    : 'bg-navy-950/60 border-slate-800/80 hover:border-slate-700 hover:bg-slate-900/60'
+                }`;
+
+                card.innerHTML = `
+                    <div class="flex items-center justify-between mb-1">
+                        <div class="flex items-center space-x-2">
+                            <span class="mono-font text-[10px] font-bold px-1.5 py-0.5 rounded bg-blue-900/40 text-sky-400 border border-blue-500/20">${op.eco}</span>
+                            <span class="text-[11px] px-2 py-0.5 rounded-full ${op.side === 'White' ? 'bg-slate-200 text-slate-900' : 'bg-slate-800 text-slate-200'} font-medium">
+                                ${op.side}
+                            </span>
+                        </div>
+                        <i data-lucide="star" class="w-4 h-4 ${isMastered ? 'text-amber-400 fill-amber-400' : 'text-slate-600'}"></i>
+                    </div>
+                    <div class="font-semibold text-xs text-slate-200 leading-tight mb-1">${op.name}</div>
+                    <div class="flex items-center justify-between text-[10px] text-slate-400">
+                        <span>${op.category}</span>
+                        <span class="text-slate-500">${op.moves.length} moves</span>
+                    </div>
+                `;
+                listContainer.appendChild(card);
+            });
+
+            lucide.createIcons();
+            updateMasteryStats();
+        }
+
+        function updateTheoryPanel() {
+            document.getElementById('opening-eco').innerText = currentOpening.eco;
+            document.getElementById('opening-title').innerText = currentOpening.name;
+            document.getElementById('opening-category').innerText = currentOpening.category;
+
+            // Stats
+            document.getElementById('stat-w').innerText = `${currentOpening.stats.w}% W`;
+            document.getElementById('stat-d').innerText = `${currentOpening.stats.d}% D`;
+            document.getElementById('stat-l').innerText = `${currentOpening.stats.l}% L`;
+            document.getElementById('bar-w').style.width = `${currentOpening.stats.w}%`;
+            document.getElementById('bar-d').style.width = `${currentOpening.stats.d}%`;
+            document.getElementById('bar-l').style.width = `${currentOpening.stats.l}%`;
+
+            // Descriptions
+            document.getElementById('theory-overview').innerText = currentOpening.overview;
+            document.getElementById('theory-plans').innerText = currentOpening.plans;
+            document.getElementById('theory-trap').innerText = currentOpening.trap;
+
+            // User Notes
+            const savedNotes = localStorage.getItem(`notes_${currentOpening.id}`) || '';
+            document.getElementById('user-notes').value = savedNotes;
+
+            updateMasteryUI();
+        }
+
+        function updateMovesUI() {
+            const container = document.getElementById('moves-container');
+            container.innerHTML = '';
+            document.getElementById('move-counter').innerText = `Move ${currentMoveIndex} / ${currentOpening.moves.length}`;
+
+            let pairDiv = null;
+            currentOpening.moves.forEach((moveSan, idx) => {
+                if (idx % 2 === 0) {
+                    pairDiv = document.createElement('div');
+                    pairDiv.className = 'flex items-center space-x-1 mb-1';
+                    const numSpan = document.createElement('span');
+                    numSpan.className = 'text-slate-500 text-[11px] w-5 font-bold';
+                    numSpan.innerText = `${Math.floor(idx / 2) + 1}.`;
+                    pairDiv.appendChild(numSpan);
+                }
+
+                const moveBtn = document.createElement('button');
+                moveBtn.onclick = () => goToMove(idx + 1);
+                moveBtn.className = `px-2 py-0.5 rounded text-xs transition-all ${
+                    idx + 1 === currentMoveIndex
+                    ? 'bg-sky-500 text-white font-bold shadow-sm shadow-sky-500/50'
+                    : idx < currentMoveIndex
+                    ? 'bg-slate-800 text-sky-300 hover:bg-slate-700'
+                    : 'bg-navy-900 text-slate-400 hover:bg-slate-800'
+                }`;
+                moveBtn.innerText = moveSan;
+                pairDiv.appendChild(moveBtn);
+
+                if (idx % 2 === 1 || idx === currentOpening.moves.length - 1) {
+                    container.appendChild(pairDiv);
+                }
+            });
+        }
+
+        function setAppMode(mode) {
+            appMode = mode;
+            const btnExplorer = document.getElementById('tab-explorer');
+            const btnPractice = document.getElementById('tab-practice');
+            const quizBanner = document.getElementById('quiz-banner');
+
+            if (mode === 'explorer') {
+                btnExplorer.className = "flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center space-x-2 bg-blue-600 text-white shadow-md";
+                btnPractice.className = "flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center space-x-2 text-slate-400 hover:text-white";
+                quizBanner.classList.add('hidden');
+            } else {
+                btnPractice.className = "flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center space-x-2 bg-blue-600 text-white shadow-md";
+                btnExplorer.className = "flex-1 py-2 text-xs font-semibold rounded-lg transition-all flex items-center justify-center space-x-2 text-slate-400 hover:text-white";
+                quizBanner.classList.remove('hidden');
+                resetPracticeLine();
+            }
+        }
+
+        function toggleMastery() {
+            const index = masteredOpenings.indexOf(currentOpening.id);
+            if (index > -1) {
+                masteredOpenings.splice(index, 1);
+                showToast(`Removed from Mastered list`);
+            } else {
+                masteredOpenings.push(currentOpening.id);
+                showToast(`Marked ${currentOpening.name} as Mastered! ★`, 'success');
+                confetti({ particleCount: 40, spread: 50, origin: { y: 0.7 } });
+            }
+            localStorage.setItem('mastered_openings', JSON.stringify(masteredOpenings));
+            updateMasteryUI();
+            renderOpeningsList();
+        }
+
+        function updateMasteryUI() {
+            const isMastered = masteredOpenings.includes(currentOpening.id);
+            const btn = document.getElementById('btn-mastered');
+            if (isMastered) {
+                btn.className = "p-2 rounded-xl border border-amber-400/60 bg-amber-500/20 text-amber-400 shadow-md transition-all";
+            } else {
+                btn.className = "p-2 rounded-xl border border-slate-700 bg-navy-950 text-slate-400 hover:text-amber-400 hover:border-amber-400/50 transition-all";
+            }
+        }
+
+        function updateMasteryStats() {
+            document.getElementById('stat-total').innerText = OPENINGS_DATABASE.length;
+            document.getElementById('stat-mastered').innerText = masteredOpenings.length;
+        }
+
+        function startRandomQuiz() {
+            const randomOp = OPENINGS_DATABASE[Math.floor(Math.random() * OPENINGS_DATABASE.length)];
+            loadOpening(randomOp.id, 'practice');
+            showToast(`Random Quiz Started: ${randomOp.name}`, 'success');
+        }
+
+        function showToast(message, type = 'info') {
+            const toast = document.getElementById('toast-message');
+            toast.innerText = message;
+            if (type === 'success') {
+                toast.className = "opacity-100 transition-opacity duration-300 text-xs px-4 py-2 rounded-lg bg-emerald-950/90 border border-emerald-500/50 text-emerald-200 text-center w-full max-w-[460px] shadow-lg";
+            } else if (type === 'error') {
+                toast.className = "opacity-100 transition-opacity duration-300 text-xs px-4 py-2 rounded-lg bg-rose-950/90 border border-rose-500/50 text-rose-200 text-center w-full max-w-[460px] shadow-lg";
+            } else {
+                toast.className = "opacity-100 transition-opacity duration-300 text-xs px-4 py-2 rounded-lg bg-sky-950/90 border border-sky-500/40 text-sky-200 text-center w-full max-w-[460px] shadow-lg";
+            }
+
+            setTimeout(() => {
+                toast.classList.add('opacity-0');
+            }, 3000);
+        }
+
+        /* ==========================================================================
+           8. INITIALIZATION & LISTENERS
+           ========================================================================== */
+        window.addEventListener('DOMContentLoaded', () => {
+            lucide.createIcons();
+
+            // Setup search listener
+            document.getElementById('search-input').addEventListener('input', renderOpeningsList);
+
+            // Category pills listeners
+            document.getElementById('category-pills').addEventListener('click', (e) => {
+                const btn = e.target.closest('.cat-btn');
+                if (!btn) return;
+                document.querySelectorAll('.cat-btn').forEach(b => {
+                    b.className = "cat-btn bg-navy-950/80 hover:bg-slate-800 text-slate-300 px-3 py-1.5 rounded-lg whitespace-nowrap border border-slate-800 transition-all text-xs";
+                });
+                btn.className = "cat-btn active bg-sky-500 text-white px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-all text-xs";
+                activeCategory = btn.dataset.cat;
+                renderOpeningsList();
+            });
+
+            // Notes auto-save listener
+            document.getElementById('user-notes').addEventListener('input', (e) => {
+                localStorage.setItem(`notes_${currentOpening.id}`, e.target.value);
+            });
+
+            // Load initial default opening (Ruy Lopez)
+            loadOpening('ruy-lopez', 'explorer');
+        });
+    </script>
+</body>
+</html>
